@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&family=Inter:wght@300;400;500&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0A0A0B;
+  --surface: #111113;
+  --surface-2: #1A1A1D;
+  --border: #2A2A2E;
+  --border-light: #222226;
+  --accent: #C8FF00;
+  --accent-dim: #8FAF00;
+  --text-primary: #F0F0F0;
+  --text-secondary: #888890;
+  --text-muted: #444450;
+  --pass: #00FF94;
+  --fail: #FF4D4D;
+  --warn: #FFB800;
+  --font-display: 'Syne', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+  --font-body: 'Inter', sans-serif;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+::selection { background: var(--accent); color: #000; }
