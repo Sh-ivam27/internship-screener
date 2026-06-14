@@ -46,6 +46,11 @@ def run_crew(company: str, roles: list, resume_paths: list, threshold: int):
 
     result = crew.kickoff()
 
+    # save the final report output to file since LLM may not save it itself
+    os.makedirs("outputs", exist_ok=True)
+    with open("outputs/candidate_report.md", "w") as f:
+        f.write(str(result))
+
     end_time = time.time()
     elapsed = round(end_time - start_time, 2)
 

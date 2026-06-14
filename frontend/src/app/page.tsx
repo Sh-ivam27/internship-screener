@@ -11,7 +11,7 @@ export default function Home() {
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)" }}>
-      
+
       {/* Header */}
       <header style={{
         borderBottom: "1px solid var(--border)",
@@ -85,6 +85,48 @@ export default function Home() {
 }
 
 function SetupTab({ onStart }: { onStart: () => void }) {
+  const [company, setCompany] = useState("");
+  const [roles, setRoles] = useState("");
+  const [threshold, setThreshold] = useState(60);
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleRun = async () => {
+    if (!company || !roles || !files) {
+      setError("Please fill in all fields and upload at least one resume.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+
+    try {
+      // Step 1 — upload resumes to backend
+      const formData = new FormData();
+      Array.from(files).forEach(file => formData.append("files", file));
+      await fetch("http://localhost:8000/upload-resumes", {
+        method: "POST",
+        body: formData,
+      });
+
+      // Step 2 — trigger the crewAI pipeline
+      const screenerData = new FormData();
+      screenerData.append("company", company);
+      screenerData.append("roles", roles);
+      screenerData.append("threshold", threshold.toString());
+      await fetch("http://localhost:8000/run-screener", {
+        method: "POST",
+        body: screenerData,
+      });
+
+      onStart();
+    } catch (err) {
+      setError("Failed to connect to backend. Make sure the server is running.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
       <div>
@@ -99,89 +141,88 @@ function SetupTab({ onStart }: { onStart: () => void }) {
 
       {/* Company + Roles */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-        <InputCard label="Company Name" placeholder="e.g. Zepto, Google, Swiggy" />
-        <InputCard label="Role Titles" placeholder="e.g. SWE Intern, PM Intern" />
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "1rem" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
+            COMPANY NAME
+          </label>
+          <input
+            placeholder="e.g. Zepto, Google, Swiggy"
+            value={company}
+            onChange={e => setCompany(e.target.value)}
+            style={{ display: "block", width: "100%", marginTop: "8px", background: "transparent", border: "none", outline: "none", color: "var(--text-primary)", fontFamily: "var(--font-body)", fontSize: "15px" }}
+          />
+        </div>
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "1rem" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
+            ROLE TITLES
+          </label>
+          <input
+            placeholder="e.g. SWE Intern, PM Intern"
+            value={roles}
+            onChange={e => setRoles(e.target.value)}
+            style={{ display: "block", width: "100%", marginTop: "8px", background: "transparent", border: "none", outline: "none", color: "var(--text-primary)", fontFamily: "var(--font-body)", fontSize: "15px" }}
+          />
+        </div>
       </div>
 
       {/* Resume Upload */}
-      <UploadCard label="Resume PDFs" hint="Upload one or multiple PDF resumes" />
+      <div
+        onClick={() => document.getElementById("resume-upload")?.click()}
+        style={{ background: "var(--surface)", border: "1px dashed var(--border)", borderRadius: "10px", padding: "2rem", textAlign: "center", cursor: "pointer" }}
+      >
+        <input
+          id="resume-upload"
+          type="file"
+          accept=".pdf"
+          multiple
+          style={{ display: "none" }}
+          onChange={e => setFiles(e.target.files)}
+        />
+        <div style={{ fontSize: "28px", marginBottom: "8px" }}>📄</div>
+        <p style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "15px" }}>
+          {files ? `${files.length} file(s) selected` : "Resume PDFs"}
+        </p>
+        <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>
+          {files ? Array.from(files).map(f => f.name).join(", ") : "Upload one or multiple PDF resumes"}
+        </p>
+      </div>
 
       {/* Threshold */}
-      <ThresholdCard />
+      <ThresholdCard value={threshold} onChange={setThreshold} />
 
       {/* Run Button */}
       <motion.button
-        onClick={onStart}
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.98 }}
+        onClick={handleRun}
+        disabled={loading}
+        whileHover={{ scale: loading ? 1 : 1.01 }}
+        whileTap={{ scale: loading ? 1 : 0.98 }}
         style={{
           width: "100%",
           padding: "14px",
-          background: "var(--accent)",
-          color: "#000",
+          background: loading ? "var(--surface-2)" : "var(--accent)",
+          color: loading ? "var(--text-muted)" : "#000",
           border: "none",
           borderRadius: "10px",
           fontFamily: "var(--font-display)",
           fontWeight: 700,
           fontSize: "16px",
-          cursor: "pointer",
+          cursor: loading ? "not-allowed" : "pointer",
           letterSpacing: "-0.3px",
         }}
       >
-        Run Screener →
+        {loading ? "Running pipeline..." : "Run Screener →"}
       </motion.button>
+
+      {error && (
+        <p style={{ color: "var(--fail)", fontSize: "13px", textAlign: "center", fontFamily: "var(--font-mono)" }}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }
 
-function InputCard({ label, placeholder }: { label: string; placeholder: string }) {
-  return (
-    <div style={{
-      background: "var(--surface)",
-      border: "1px solid var(--border)",
-      borderRadius: "10px",
-      padding: "1rem",
-    }}>
-      <label style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
-        {label.toUpperCase()}
-      </label>
-      <input
-        placeholder={placeholder}
-        style={{
-          display: "block",
-          width: "100%",
-          marginTop: "8px",
-          background: "transparent",
-          border: "none",
-          outline: "none",
-          color: "var(--text-primary)",
-          fontFamily: "var(--font-body)",
-          fontSize: "15px",
-        }}
-      />
-    </div>
-  );
-}
-
-function UploadCard({ label, hint }: { label: string; hint: string }) {
-  return (
-    <div style={{
-      background: "var(--surface)",
-      border: "1px dashed var(--border)",
-      borderRadius: "10px",
-      padding: "2rem",
-      textAlign: "center",
-      cursor: "pointer",
-    }}>
-      <div style={{ fontSize: "28px", marginBottom: "8px" }}>📄</div>
-      <p style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "15px" }}>{label}</p>
-      <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>{hint}</p>
-    </div>
-  );
-}
-
-function ThresholdCard() {
-  const [value, setValue] = useState(60);
+function ThresholdCard({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div style={{
       background: "var(--surface)",
@@ -199,7 +240,7 @@ function ThresholdCard() {
       </div>
       <input
         type="range" min={0} max={100} value={value}
-        onChange={e => setValue(Number(e.target.value))}
+        onChange={e => onChange(Number(e.target.value))}
         style={{ width: "100%", accentColor: "var(--accent)" }}
       />
     </div>
@@ -377,22 +418,15 @@ function ResultsTab() {
             transition={{ delay: i * 0.07 }}
             style={{
               background: "var(--surface)",
-              border: `1px solid ${c.status === "pass" ? "var(--border)" : "var(--border)"}`,
+              border: "1px solid var(--border)",
               borderLeft: `3px solid ${c.status === "pass" ? "var(--pass)" : "var(--fail)"}`,
               borderRadius: "10px",
               overflow: "hidden",
             }}
           >
-            {/* Header Row */}
             <div
               onClick={() => setExpanded(expanded === i ? null : i)}
-              style={{
-                padding: "14px 16px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
-              }}
+              style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                 <div style={{
@@ -409,10 +443,7 @@ function ResultsTab() {
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                <span style={{
-                  fontFamily: "var(--font-mono)", fontSize: "22px", fontWeight: 500,
-                  color: c.status === "pass" ? "var(--pass)" : "var(--fail)",
-                }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "22px", fontWeight: 500, color: c.status === "pass" ? "var(--pass)" : "var(--fail)" }}>
                   {c.score}%
                 </span>
                 <span style={{
@@ -429,7 +460,6 @@ function ResultsTab() {
               </div>
             </div>
 
-            {/* Expanded Details */}
             <AnimatePresence>
               {expanded === i && (
                 <motion.div
@@ -437,13 +467,7 @@ function ResultsTab() {
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  style={{
-                    borderTop: "1px solid var(--border)",
-                    padding: "16px",
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "12px",
-                  }}
+                  style={{ borderTop: "1px solid var(--border)", padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
                 >
                   <div>
                     <p style={{ fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", marginBottom: "8px" }}>STRENGTHS</p>
@@ -499,24 +523,24 @@ function OutputsTab() {
               background: "var(--surface)",
               border: "1px solid var(--border)",
               borderRadius: "10px",
-              padding: "1.25rem",
+              padding: "1.75rem",
               display: "flex",
               flexDirection: "column",
               gap: "12px",
             }}
           >
             <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-            <div style={{
-              width: "44px", height: "44px",
-              background: "var(--surface-2)",
-              border: "1px solid var(--border)",
-              borderRadius: "10px",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: "var(--accent)",
-              flexShrink: 0,
-            }}>
-              {o.icon}
-            </div>
+              <div style={{
+                width: "44px", height: "44px",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: "10px",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "var(--accent)",
+                flexShrink: 0,
+              }}>
+                {o.icon}
+              </div>
               <div>
                 <p style={{ fontWeight: 500, fontSize: "15px" }}>{o.label}</p>
                 <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>{o.desc}</p>
