@@ -134,15 +134,31 @@ def get_tasks(company: str, roles: list, resume_paths: list, threshold: int, res
             tasks.append(email_task)
 
             # Stage 2 — compile everything into a clean candidate report
+            # Stage 2 — compile everything into a clean candidate report
             report_task = Task(
                 description=f"""
-                Compile a complete candidate report for this applicant for {role} at {company}.
-                Include: candidate name, total score, field-by-field scores, strengths, weaknesses,
-                relevant projects, interview questions, and email draft.
-                Format it cleanly in markdown.
-                Save the report as outputs/candidate_report.md
+                You are a report writer. Output ONLY a structured markdown report. Do not roleplay, do not write scripts, do not add commentary.
+
+                Write a candidate report with EXACTLY these sections:
+                # Candidate Report: [Candidate Name]
+                ## Score: [total]/100 — [PASS/FAIL]
+                ## Field Scores
+                [list each of the 10 fields with score out of 10]
+                ## Strengths
+                [bullet points]
+                ## Weaknesses
+                [bullet points]
+                ## Relevant Projects
+                [bullet points]
+                ## Interview Questions
+                [numbered list]
+                ## Draft Email
+                [email text]
+
+                Base everything on the previous agents' outputs for {role} at {company}.
+                Output the report and nothing else.
                 """,
-                expected_output="A complete formatted markdown candidate report.",
+                expected_output="A complete structured markdown candidate report with all sections filled in.",
                 agent=agents["report_writer"],
                 context=[screen_task, deep_task, iq_task, email_task],
             )

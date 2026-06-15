@@ -55,7 +55,6 @@ def run_crew(company: str, roles: list, resume_paths: list, threshold: int):
     elapsed = round(end_time - start_time, 2)
 
     # save time log to outputs/
-    os.makedirs("outputs", exist_ok=True)
     with open("outputs/time_log.txt", "w") as f:
         f.write(f"Total processing time: {elapsed}s\n")
         f.write(f"Company: {company}\n")

@@ -5,7 +5,7 @@
 from crewai import Agent, LLM
 
 # local LLM running via Ollama — no API key needed, runs fully on your machine
-llm = LLM(model="ollama/llama3.2", base_url="http://localhost:11434", api_key="ollama")
+llm = LLM(model="ollama/llama3.1:8b", base_url="http://localhost:11434", api_key="ollama")
 
 def get_agents():
 
