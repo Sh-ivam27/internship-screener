@@ -55,8 +55,9 @@ def get_tasks(company: str, roles: list, resume_paths: list, threshold: int, res
             screen_task = Task(
                 description=f"""
                 Score this resume against the 10-field rubric for {role} at {company}.
-                Score each field from 0-10 with clear reasoning.
-                Compute total score out of 100.
+                Score EACH field with a single number from 0 to 10. No other scale. No partial scores.
+                Add all 10 field scores together. The total MUST be out of 100 maximum.
+                Do not use any other scoring system.
                 If total >= {threshold}, mark as PASS. Otherwise mark as FAIL.
 
                 Resume content:
