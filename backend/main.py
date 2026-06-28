@@ -97,3 +97,65 @@ def get_results():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+@app.post("/calibrate") # frontend sends recruiter's manual scores, backend generates personalised scoring prompt
+async def calibrate(request: dict):
+    scores = request.get("scores", {})
+    
+    if not scores:
+        return JSONResponse(status_code=400, content={"error": "No scores provided"})
+
+    # analyse scoring pattern — find average score per field across all resumes
+    field_averages = {}
+    for field in [
+        "Relevant Skills Match", "Experience Level", "Project Relevance",
+        "Educational Background", "Tools & Technologies", "Achievement Quality",
+        "Communication Clarity", "Role-Specific Keywords",
+        "Extracurriculars / Leadership", "Overall Fit Impression"
+    ]:
+        field_scores = [resume_scores[field] for resume_scores in scores.values() if field in resume_scores]
+        field_averages[field] = round(sum(field_scores) / len(field_scores), 1) if field_scores else 5.0
+
+    # find which fields the recruiter weights heavily (score > 7) and lightly (score < 4)
+    high_weight = [f for f, avg in field_averages.items() if avg >= 7]
+    low_weight = [f for f, avg in field_averages.items() if avg <= 4]
+
+    # generate personalised scoring prompt based on recruiter's pattern
+    personalised_prompt = f"""
+You are scoring resumes for a recruiter with a specific evaluation style learned from their manual scores.
+
+RECRUITER SCORING STYLE:
+- Average scores per field from manual evaluation: {field_averages}
+- Fields this recruiter weights HEAVILY (score generously): {high_weight if high_weight else 'None identified yet'}
+- Fields this recruiter weights LIGHTLY (score strictly): {low_weight if low_weight else 'None identified yet'}
+
+INSTRUCTIONS:
+- Mirror this recruiter's scoring style when evaluating candidates
+- For heavily weighted fields: be generous, reward partial matches
+- For lightly weighted fields: be strict, only reward strong matches
+- Score each field 0-10, total out of 100
+- Maintain consistency with the recruiter's demonstrated preferences
+"""
+
+    # save personalised prompt to file
+    os.makedirs("outputs", exist_ok=True)
+    with open("outputs/personalised_prompt.txt", "w") as f:
+        f.write(personalised_prompt)
+
+    # save calibration data for validation later
+    with open("outputs/calibration_data.json", "w") as f:
+        json.dump({
+            "manual_scores": scores,
+            "field_averages": field_averages,
+            "high_weight_fields": high_weight,
+            "low_weight_fields": low_weight,
+            "prompt_version": 1
+        }, f, indent=2)
+
+    return {
+        "status": "calibrated",
+        "field_averages": field_averages,
+        "high_weight_fields": high_weight,
+        "low_weight_fields": low_weight,
+        "prompt_version": 1
+    }

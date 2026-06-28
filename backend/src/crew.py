@@ -32,8 +32,15 @@ def run_crew(roles: list, resume_paths: list, threshold: int, jds: dict):
             resume_texts[path] = f"Could not read resume: {str(e)}"
             print(f"❌ Failed to read resume: {path} — {str(e)}")
 
-    agents = get_agents()
-    tasks = get_tasks(roles, resume_paths, threshold, resume_texts, jds)
+    # load personalised prompt if calibration has been done
+    personalised_prompt = ""
+    prompt_path = "outputs/personalised_prompt.txt"
+    if os.path.exists(prompt_path):
+        with open(prompt_path, "r") as f:
+            personalised_prompt = f.read()
+        print("✅ Loaded personalised scoring prompt from calibration")
+    else:
+        print("⚠️ No calibration found — using default scoring")
 
     # assemble the crew and run sequentially
     crew = Crew(

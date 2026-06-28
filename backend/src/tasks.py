@@ -4,7 +4,7 @@
 
 from crewai import Task
 
-def get_tasks(roles: list, resume_paths: list, threshold: int, resume_texts: dict, jds: dict):
+def get_tasks(roles: list, resume_paths: list, threshold: int, resume_texts: dict, jds: dict, personalised_prompt: str = ""):
     from src.agents import get_agents
     agents = get_agents()
     tasks = []
@@ -47,7 +47,9 @@ def get_tasks(roles: list, resume_paths: list, threshold: int, resume_texts: dic
             # Stage 1 — score resume against rubric, pass/fail decision
             screen_task = Task(
                 description=f"""
-                Score this resume against the 10-field rubric for {role} at {company}.
+                {personalised_prompt}
+
+                Score this resume against the 10-field rubric for {role}.
                 Score EACH field with a single number from 0 to 10. No other scale. No partial scores.
                 Add all 10 field scores together. The total MUST be out of 100 maximum.
                 Do not use any other scoring system.
