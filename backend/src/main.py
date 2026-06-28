@@ -6,10 +6,19 @@ import os
 from src.crew import run_crew
 
 def main():
-    # test inputs — change these to match your actual test data
-    company = "Zepto"
+    # test values — change these to test different scenarios
     roles = ["Software Engineering Intern"]
     threshold = 60
+
+    # paste a real JD here for testing
+    jds = {
+        "Software Engineering Intern": """
+        We are looking for a Software Engineering Intern to join our team.
+        Required skills: Python, data structures, algorithms, REST APIs.
+        Preferred: experience with distributed systems, machine learning, cloud platforms.
+        You will work on backend systems, write clean code, and collaborate with senior engineers.
+        """
+    }
 
     # get all PDFs from inputs folder
     resume_paths = [
@@ -25,10 +34,10 @@ def main():
     print(f"Found {len(resume_paths)} resume(s): {resume_paths}")
 
     result = run_crew(
-        company=company,
         roles=roles,
         resume_paths=resume_paths,
         threshold=threshold,
+        jds=jds,
     )
 
     print("\n✅ Pipeline complete.")
