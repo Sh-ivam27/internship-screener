@@ -700,7 +700,31 @@ function CalibrateTab() {
               </motion.button>
             ) : (
               <motion.button
-                onClick={() => { handleSaveResume(); setTimeout(handleCalibrate, 100); }}
+              onClick={async () => {
+                const updatedScores = { ...scores, [currentFile.name]: currentScores };
+                setScores(updatedScores);
+                setCalibrating(true);
+                setError("");
+                try {
+                  const formData = new FormData();
+                  Array.from(files!).forEach(file => formData.append("files", file));
+                  await fetch("http://localhost:8000/upload-calibration-resumes", {
+                    method: "POST",
+                    body: formData,
+                  });
+                  const response = await fetch("http://localhost:8000/calibrate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ scores: updatedScores }),
+                  });
+                  if (response.ok) setDone(true);
+                  else setError("Calibration failed. Check the backend.");
+                } catch {
+                  setError("Could not connect to backend.");
+                } finally {
+                  setCalibrating(false);
+                }
+              }}
                 disabled={calibrating}
                 whileHover={{ scale: calibrating ? 1 : 1.01 }}
                 whileTap={{ scale: calibrating ? 1 : 0.98 }}

@@ -133,7 +133,7 @@ async def calibrate(request: dict):
                 text += page.get_text()
             doc.close()
             resume_examples[filename] = {
-                "resume_text": text.strip()[:2000],  # first 2000 chars to keep prompt concise
+                "resume_text": text.strip(),  # full resume text
                 "manual_scores": resume_scores,
                 "total": sum(resume_scores.values())
             }
@@ -159,7 +159,7 @@ async def calibrate(request: dict):
     examples_text = ""
     for filename, data in resume_examples.items():
         examples_text += f"\n--- Example Resume: {filename} ---\n"
-        examples_text += f"Resume snippet: {data['resume_text'][:500]}\n"
+        examples_text += f"Resume content:\n{data['resume_text']}\n"
         examples_text += f"Recruiter scores: {data['manual_scores']}\n"
         examples_text += f"Total: {data['total']}/100\n"
 
@@ -190,7 +190,7 @@ INSTRUCTIONS:
     # save calibration data
     with open("outputs/calibration_data.json", "w") as f:
         json.dump({
-            "resume_examples": {k: {**v, "resume_text": v["resume_text"][:200]} for k, v in resume_examples.items()},
+            "resume_examples": {k: {**v} for k, v in resume_examples.items()},
             "field_averages": field_averages,
             "high_weight_fields": high_weight,
             "low_weight_fields": low_weight,
