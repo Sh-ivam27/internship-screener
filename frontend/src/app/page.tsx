@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BarChart2, FileText, Mail, Table, Clock, Briefcase } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
-const tabs = ["Setup", "Progress", "Results", "Outputs"];
+const tabs = ["Setup", "Calibrate", "Progress", "Results", "Validate", "Outputs"];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState(0);
@@ -74,10 +74,12 @@ export default function Home() {
           transition={{ duration: 0.2 }}
           style={{ padding: "2rem", maxWidth: "900px", margin: "0 auto" }}
         >
-          {activeTab === 0 && <SetupTab onStart={() => setActiveTab(1)} />}
-          {activeTab === 1 && <ProgressTab />}
-          {activeTab === 2 && <ResultsTab />}
-          {activeTab === 3 && <OutputsTab />}
+          {activeTab === 0 && <SetupTab onStart={() => setActiveTab(2)} />}
+          {activeTab === 1 && <CalibrateTab />}
+          {activeTab === 2 && <ProgressTab />}
+          {activeTab === 3 && <ResultsTab />}
+          {activeTab === 4 && <ValidateTab />}
+          {activeTab === 5 && <OutputsTab />}
         </motion.div>
       </AnimatePresence>
 
@@ -438,6 +440,307 @@ function ThresholdCard({ value, onChange }: { value: number; onChange: (v: numbe
   );
 }
 
+const FIELDS = [
+  "Relevant Skills Match",
+  "Experience Level",
+  "Project Relevance",
+  "Educational Background",
+  "Tools & Technologies",
+  "Achievement Quality",
+  "Communication Clarity",
+  "Role-Specific Keywords",
+  "Extracurriculars / Leadership",
+  "Overall Fit Impression",
+];
+
+function CalibrateTab() {
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [currentResume, setCurrentResume] = useState(0);
+  const [scores, setScores] = useState<Record<string, Record<string, number>>>({});
+  const [currentScores, setCurrentScores] = useState<Record<string, number>>(
+    Object.fromEntries(FIELDS.map(f => [f, 5]))
+  );
+  const [calibrating, setCalibrating] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
+
+  const resumeList = files ? Array.from(files) : [];
+  const currentFile = resumeList[currentResume];
+
+  const handleScoreChange = (field: string, value: number) => {
+    setCurrentScores(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveResume = () => {
+    if (!currentFile) return;
+    setScores(prev => ({ ...prev, [currentFile.name]: currentScores }));
+    if (currentResume < resumeList.length - 1) {
+      setCurrentResume(currentResume + 1);
+      setCurrentScores(Object.fromEntries(FIELDS.map(f => [f, 5])));
+    }
+  };
+
+  const handleCalibrate = async () => {
+    if (Object.keys(scores).length < 1) {
+      setError("Please score at least one resume before calibrating.");
+      return;
+    }
+    setCalibrating(true);
+    setError("");
+
+    try {
+      const response = await fetch("http://localhost:8000/calibrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scores }),
+      });
+      if (response.ok) setDone(true);
+      else setError("Calibration failed. Check the backend.");
+    } catch {
+      setError("Could not connect to backend.");
+    } finally {
+      setCalibrating(false);
+    }
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.05 } },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, x: -10 },
+    visible: { opacity: 1, x: 0 },
+  };
+
+  if (done) return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        justifyContent: "center", gap: "1rem", padding: "4rem 0", textAlign: "center"
+      }}
+    >
+      <div style={{
+        width: "64px", height: "64px", borderRadius: "50%",
+        background: "rgba(0,255,148,0.1)", border: "2px solid var(--pass)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "28px"
+      }}>✓</div>
+      <h2 style={{ fontFamily: "var(--font-display)", fontSize: "24px", fontWeight: 800 }}>
+        Calibration Complete
+      </h2>
+      <p style={{ color: "var(--text-secondary)", fontSize: "14px", maxWidth: "400px" }}>
+        Your scoring preferences have been captured. The pipeline will now score candidates aligned to your style.
+      </p>
+      <motion.button
+        onClick={() => { setDone(false); setFiles(null); setCurrentResume(0); setScores({}); }}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        style={{
+          padding: "10px 24px", background: "var(--surface-2)",
+          border: "1px solid var(--border)", borderRadius: "8px",
+          color: "var(--text-secondary)", fontFamily: "var(--font-mono)",
+          fontSize: "13px", cursor: "pointer", marginTop: "8px"
+        }}
+      >
+        Recalibrate
+      </motion.button>
+    </motion.div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+      <div>
+        <h2 style={{ fontFamily: "var(--font-display)", fontSize: "24px", fontWeight: 800, letterSpacing: "-0.5px" }}>
+          Calibrate
+        </h2>
+        <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "4px" }}>
+          Score 3-5 resumes manually. The system will learn your evaluation style.
+        </p>
+      </div>
+
+      {/* Upload */}
+      {!files && (
+        <div
+          onClick={() => document.getElementById("calibrate-upload")?.click()}
+          style={{
+            background: "var(--surface)", border: "1px dashed var(--border)",
+            borderRadius: "10px", padding: "2.5rem", textAlign: "center", cursor: "pointer"
+          }}
+        >
+          <input
+            id="calibrate-upload" type="file" accept=".pdf" multiple
+            style={{ display: "none" }}
+            onChange={e => setFiles(e.target.files)}
+          />
+          <div style={{ fontSize: "28px", marginBottom: "8px" }}>📄</div>
+          <p style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: "15px" }}>
+            Upload 3-5 resumes to calibrate
+          </p>
+          <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginTop: "4px" }}>
+            You'll score each one manually on the 10 fields
+          </p>
+        </div>
+      )}
+
+      {/* Scoring UI */}
+      {files && currentFile && (
+        <>
+          {/* Progress */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {resumeList.map((f, i) => (
+              <div key={f.name} style={{
+                height: "4px", flex: 1, borderRadius: "2px",
+                background: i < currentResume ? "var(--pass)" :
+                  i === currentResume ? "var(--accent)" : "var(--border)"
+              }} />
+            ))}
+          </div>
+
+          <div style={{
+            background: "var(--surface)", border: "1px solid var(--accent)",
+            borderRadius: "10px", padding: "1rem 1.25rem",
+            display: "flex", alignItems: "center", justifyContent: "space-between"
+          }}>
+            <div>
+              <p style={{ fontWeight: 500, fontSize: "15px" }}>{currentFile.name}</p>
+              <p style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+                Resume {currentResume + 1} of {resumeList.length}
+              </p>
+            </div>
+            <span style={{
+              fontSize: "11px", padding: "3px 10px", borderRadius: "20px",
+              background: "rgba(200,255,0,0.1)", color: "var(--accent)",
+              fontFamily: "var(--font-mono)"
+            }}>
+              Scoring
+            </span>
+          </div>
+
+          {/* Field Scores */}
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+          >
+            {FIELDS.map((field, i) => (
+              <motion.div
+                key={field}
+                variants={itemVariants}
+                style={{
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  borderRadius: "10px", padding: "12px 16px",
+                  display: "flex", alignItems: "center", gap: "16px"
+                }}
+              >
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: "13px", fontWeight: 500 }}>{field}</p>
+                  <p style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+                    Field {i + 1} of 10
+                  </p>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <input
+                    type="range" min={0} max={10}
+                    value={currentScores[field]}
+                    onChange={e => handleScoreChange(field, Number(e.target.value))}
+                    style={{ width: "120px", accentColor: "var(--accent)" }}
+                  />
+                  <span style={{
+                    fontFamily: "var(--font-mono)", fontSize: "18px", fontWeight: 500,
+                    color: "var(--accent)", width: "32px", textAlign: "right"
+                  }}>
+                    {currentScores[field]}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          {/* Total */}
+          <div style={{
+            background: "var(--surface-2)", border: "1px solid var(--border)",
+            borderRadius: "10px", padding: "1rem 1.25rem",
+            display: "flex", justifyContent: "space-between", alignItems: "center"
+          }}>
+            <span style={{ fontSize: "13px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
+              TOTAL SCORE
+            </span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "24px", fontWeight: 500, color: "var(--accent)" }}>
+              {Object.values(currentScores).reduce((a, b) => a + b, 0)}/100
+            </span>
+          </div>
+
+          {/* Save / Calibrate */}
+          <div style={{ display: "flex", gap: "12px" }}>
+            {currentResume < resumeList.length - 1 ? (
+              <motion.button
+                onClick={handleSaveResume}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  flex: 1, padding: "12px", background: "var(--accent)", color: "#000",
+                  border: "none", borderRadius: "10px", fontFamily: "var(--font-display)",
+                  fontWeight: 700, fontSize: "15px", cursor: "pointer"
+                }}
+              >
+                Save & Next Resume →
+              </motion.button>
+            ) : (
+              <motion.button
+                onClick={() => { handleSaveResume(); setTimeout(handleCalibrate, 100); }}
+                disabled={calibrating}
+                whileHover={{ scale: calibrating ? 1 : 1.01 }}
+                whileTap={{ scale: calibrating ? 1 : 0.98 }}
+                style={{
+                  flex: 1, padding: "12px",
+                  background: calibrating ? "var(--surface-2)" : "var(--accent)",
+                  color: calibrating ? "var(--text-muted)" : "#000",
+                  border: "none", borderRadius: "10px", fontFamily: "var(--font-display)",
+                  fontWeight: 700, fontSize: "15px",
+                  cursor: calibrating ? "not-allowed" : "pointer"
+                }}
+              >
+                {calibrating ? "Calibrating..." : "Save & Calibrate →"}
+              </motion.button>
+            )}
+          </div>
+
+          {error && (
+            <p style={{ color: "var(--fail)", fontSize: "13px", textAlign: "center", fontFamily: "var(--font-mono)" }}>
+              {error}
+            </p>
+          )}
+        </>
+      )}
+
+      {/* Scored Resumes Summary */}
+      {Object.keys(scores).length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          <label style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
+            SCORED SO FAR
+          </label>
+          {Object.entries(scores).map(([name, s]) => (
+            <div key={name} style={{
+              background: "var(--surface)", border: "1px solid var(--border)",
+              borderLeft: "3px solid var(--pass)", borderRadius: "10px",
+              padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center"
+            }}>
+              <span style={{ fontSize: "13px" }}>{name}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "14px", color: "var(--pass)" }}>
+                {Object.values(s).reduce((a, b) => a + b, 0)}/100
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProgressTab() {
   const agents = [
     { name: "JD Generator", status: "done", time: "2.1s" },
@@ -598,6 +901,14 @@ function ResultsTab() {
       }}>
         <ReactMarkdown>{report}</ReactMarkdown>
       </div>
+    </div>
+  );
+}
+
+function ValidateTab() {
+  return (
+    <div style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "14px" }}>
+      Validation coming soon...
     </div>
   );
 }
