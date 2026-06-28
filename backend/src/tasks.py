@@ -4,29 +4,20 @@
 
 from crewai import Task
 
-def get_tasks(company: str, roles: list, resume_paths: list, threshold: int, resume_texts: dict):
+def get_tasks(roles: list, resume_paths: list, threshold: int, resume_texts: dict, jds: dict):
     from src.agents import get_agents
     agents = get_agents()
     tasks = []
 
     for role in roles:
 
-        # Stage 0 — generate a full JD from company name + role title
-        jd_gen_task = Task(
-            description=f"""
-            Generate a detailed, realistic job description for the role of {role} at {company}.
-            Include: role overview, key responsibilities, required skills, preferred qualifications, and tools/technologies.
-            Make it specific to what {company} would actually look for.
-            """,
-            expected_output="A full structured job description for the role.",
-            agent=agents["jd_generator"],
-        )
-        tasks.append(jd_gen_task)
+        # get the recruiter's actual JD for this role
+        role_jd = jds.get(role, "No job description provided for this role.")
 
-        # Stage 0 — convert JD into structured 10-field scoring rubric
+        # Stage 0 — convert recruiter's JD into structured 10-field scoring rubric
         jd_analyst_task = Task(
             description=f"""
-            Take the generated job description for {role} at {company} and structure it into a 10-field scoring rubric.
+            Take this job description for the role of {role} and structure it into a 10-field scoring rubric.
             The 10 fields are:
             1. Relevant Skills Match
             2. Experience Level
@@ -38,11 +29,13 @@ def get_tasks(company: str, roles: list, resume_paths: list, threshold: int, res
             8. Role-Specific Keywords
             9. Extracurriculars / Leadership
             10. Overall Fit Impression
-            For each field, specify exactly what to look for based on the JD.
+            For each field, specify exactly what to look for based on this JD.
+
+            Job Description:
+            {role_jd}
             """,
             expected_output="A structured 10-field scoring rubric for this role.",
             agent=agents["jd_analyst"],
-            context=[jd_gen_task],
         )
         tasks.append(jd_analyst_task)
 

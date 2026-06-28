@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarChart2, FileText, Mail, Table, Clock, Briefcase } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 const tabs = ["Setup", "Progress", "Results", "Outputs"];
 
@@ -85,39 +86,58 @@ export default function Home() {
 }
 
 function SetupTab({ onStart }: { onStart: () => void }) {
-  const [company, setCompany] = useState("");
-  const [roles, setRoles] = useState("");
   const [threshold, setThreshold] = useState(60);
   const [files, setFiles] = useState<FileList | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [roles, setRoles] = useState<{ id: number; title: string; jd: string }[]>([]);
+  const [showAddRole, setShowAddRole] = useState(false);
+  const [newRoleTitle, setNewRoleTitle] = useState("");
+  const [newRoleJD, setNewRoleJD] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const handleAddRole = () => {
+    if (!newRoleTitle || !newRoleJD) return;
+    if (editingId !== null) {
+      setRoles(roles.map(r => r.id === editingId ? { ...r, title: newRoleTitle, jd: newRoleJD } : r));
+      setEditingId(null);
+    } else {
+      setRoles([...roles, { id: Date.now(), title: newRoleTitle, jd: newRoleJD }]);
+    }
+    setNewRoleTitle("");
+    setNewRoleJD("");
+    setShowAddRole(false);
+  };
+
+  const handleEditRole = (role: { id: number; title: string; jd: string }) => {
+    setNewRoleTitle(role.title);
+    setNewRoleJD(role.jd);
+    setEditingId(role.id);
+    setShowAddRole(true);
+  };
+
+  const handleDeleteRole = (id: number) => {
+    setRoles(roles.filter(r => r.id !== id));
+  };
 
   const handleRun = async () => {
-    if (!company || !roles || !files) {
-      setError("Please fill in all fields and upload at least one resume.");
+    if (roles.length === 0 || !files) {
+      setError("Please add at least one role and upload resumes.");
       return;
     }
     setError("");
     setLoading(true);
 
     try {
-      // Step 1 — upload resumes to backend
       const formData = new FormData();
       Array.from(files).forEach(file => formData.append("files", file));
-      await fetch("http://localhost:8000/upload-resumes", {
-        method: "POST",
-        body: formData,
-      });
+      await fetch("http://localhost:8000/upload-resumes", { method: "POST", body: formData });
 
-      // Step 2 — trigger the crewAI pipeline
       const screenerData = new FormData();
-      screenerData.append("company", company);
-      screenerData.append("roles", roles);
+      screenerData.append("roles", roles.map(r => r.title).join(","));
+      screenerData.append("jds", JSON.stringify(roles.reduce((acc, r) => ({ ...acc, [r.title]: r.jd }), {})));
       screenerData.append("threshold", threshold.toString());
-      await fetch("http://localhost:8000/run-screener", {
-        method: "POST",
-        body: screenerData,
-      });
+      await fetch("http://localhost:8000/run-screener", { method: "POST", body: screenerData });
 
       onStart();
     } catch (err) {
@@ -125,6 +145,17 @@ function SetupTab({ onStart }: { onStart: () => void }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: { opacity: 1, transition: { staggerChildren: 0.08 } }
+  };
+
+  const cardVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+    exit: { opacity: 0, x: -20, transition: { duration: 0.2 } }
   };
 
   return (
@@ -139,30 +170,190 @@ function SetupTab({ onStart }: { onStart: () => void }) {
         </p>
       </div>
 
-      {/* Company + Roles */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "1rem" }}>
+      {/* Roles Section */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <label style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
-            COMPANY NAME
+            OPEN ROLES ({roles.length})
           </label>
-          <input
-            placeholder="e.g. Zepto, Google, Swiggy"
-            value={company}
-            onChange={e => setCompany(e.target.value)}
-            style={{ display: "block", width: "100%", marginTop: "8px", background: "transparent", border: "none", outline: "none", color: "var(--text-primary)", fontFamily: "var(--font-body)", fontSize: "15px" }}
-          />
+          <motion.button
+            onClick={() => { setShowAddRole(!showAddRole); setEditingId(null); setNewRoleTitle(""); setNewRoleJD(""); }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            style={{
+              padding: "6px 14px",
+              background: showAddRole ? "var(--surface-2)" : "var(--accent)",
+              color: showAddRole ? "var(--text-secondary)" : "#000",
+              border: "none",
+              borderRadius: "6px",
+              fontFamily: "var(--font-mono)",
+              fontSize: "12px",
+              cursor: "pointer",
+              fontWeight: 500,
+            }}
+          >
+            {showAddRole ? "Cancel" : "+ Add Role"}
+          </motion.button>
         </div>
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "10px", padding: "1rem" }}>
-          <label style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
-            ROLE TITLES
-          </label>
-          <input
-            placeholder="e.g. SWE Intern, PM Intern"
-            value={roles}
-            onChange={e => setRoles(e.target.value)}
-            style={{ display: "block", width: "100%", marginTop: "8px", background: "transparent", border: "none", outline: "none", color: "var(--text-primary)", fontFamily: "var(--font-body)", fontSize: "15px" }}
-          />
-        </div>
+
+        {/* Add/Edit Role Form */}
+        <AnimatePresence>
+          {showAddRole && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25 }}
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--accent)",
+                borderRadius: "10px",
+                padding: "1.25rem",
+                display: "flex",
+                flexDirection: "column",
+                gap: "12px",
+                overflow: "hidden",
+              }}
+            >
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
+                  ROLE TITLE
+                </label>
+                <input
+                  placeholder="e.g. Software Engineering Intern"
+                  value={newRoleTitle}
+                  onChange={e => setNewRoleTitle(e.target.value)}
+                  style={{ display: "block", width: "100%", marginTop: "6px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", padding: "8px 12px", outline: "none", color: "var(--text-primary)", fontFamily: "var(--font-body)", fontSize: "14px" }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", letterSpacing: "0.5px" }}>
+                  JOB DESCRIPTION
+                </label>
+                <textarea
+                  placeholder="Paste the full job description here..."
+                  value={newRoleJD}
+                  onChange={e => setNewRoleJD(e.target.value)}
+                  rows={6}
+                  style={{ display: "block", width: "100%", marginTop: "6px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "6px", padding: "10px 12px", outline: "none", color: "var(--text-primary)", fontFamily: "var(--font-body)", fontSize: "14px", resize: "vertical" }}
+                />
+              </div>
+              <motion.button
+                onClick={handleAddRole}
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                style={{
+                  padding: "10px",
+                  background: "var(--accent)",
+                  color: "#000",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 700,
+                  fontSize: "14px",
+                  cursor: "pointer",
+                }}
+              >
+                {editingId !== null ? "Update Role" : "Save Role"}
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Role Cards */}
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          style={{ display: "flex", flexDirection: "column", gap: "8px" }}
+        >
+          <AnimatePresence>
+            {roles.map(role => (
+              <motion.div
+                key={role.id}
+                variants={cardVariants}
+                exit="exit"
+                layout
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderLeft: "3px solid var(--accent)",
+                  borderRadius: "10px",
+                  padding: "1rem 1.25rem",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  justifyContent: "space-between",
+                  gap: "12px",
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 500, fontSize: "15px", fontFamily: "var(--font-display)" }}>{role.title}</p>
+                  <p style={{
+                    fontSize: "12px",
+                    color: "var(--text-secondary)",
+                    marginTop: "4px",
+                    fontFamily: "var(--font-mono)",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}>
+                    {role.jd.slice(0, 80)}...
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexShrink: 0 }}>
+                  <motion.button
+                    onClick={() => handleEditRole(role)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    style={{
+                      padding: "5px 12px",
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "6px",
+                      color: "var(--text-secondary)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "11px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Edit
+                  </motion.button>
+                  <motion.button
+                    onClick={() => handleDeleteRole(role.id)}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    style={{
+                      padding: "5px 12px",
+                      background: "rgba(255,77,77,0.08)",
+                      border: "1px solid rgba(255,77,77,0.2)",
+                      borderRadius: "6px",
+                      color: "var(--fail)",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "11px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Delete
+                  </motion.button>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {roles.length === 0 && !showAddRole && (
+            <div style={{
+              border: "1px dashed var(--border)",
+              borderRadius: "10px",
+              padding: "2rem",
+              textAlign: "center",
+              color: "var(--text-muted)",
+              fontFamily: "var(--font-mono)",
+              fontSize: "13px",
+            }}>
+              No roles added yet. Click "+ Add Role" to get started.
+            </div>
+          )}
+        </motion.div>
       </div>
 
       {/* Resume Upload */}
@@ -345,34 +536,40 @@ function ProgressTab() {
 }
 
 function ResultsTab() {
-  const candidates = [
-    {
-      name: "Arjun Mehta",
-      role: "SWE Intern",
-      score: 78,
-      status: "pass",
-      strengths: ["Strong Python", "Relevant projects", "Clear resume"],
-      weaknesses: ["No cloud experience", "Limited leadership"],
-    },
-    {
-      name: "Priya Sharma",
-      role: "PM Intern",
-      score: 65,
-      status: "pass",
-      strengths: ["Product thinking", "Communication clarity"],
-      weaknesses: ["No internship experience"],
-    },
-    {
-      name: "Rohan Das",
-      role: "SWE Intern",
-      score: 42,
-      status: "fail",
-      strengths: ["Good education"],
-      weaknesses: ["Missing core skills", "Weak projects", "No relevant tools"],
-    },
-  ];
+  const [report, setReport] = useState<string | null>(null);
+  const [timeLog, setTimeLog] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const [expanded, setExpanded] = useState<number | null>(null);
+  useEffect(() => {
+    fetch("http://localhost:8000/results")
+      .then(res => res.json())
+      .then(data => {
+        setReport(data.report);
+        setTimeLog(data.time_log);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Could not fetch results. Make sure the backend is running.");
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) return (
+    <div style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "14px" }}>
+      Fetching results...
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ color: "var(--fail)", fontFamily: "var(--font-mono)", fontSize: "14px" }}>{error}</div>
+  );
+
+  if (!report) return (
+    <div style={{ color: "var(--text-secondary)", fontFamily: "var(--font-mono)", fontSize: "14px" }}>
+      No results yet. Run the screener first.
+    </div>
+  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
@@ -380,112 +577,26 @@ function ResultsTab() {
         <h2 style={{ fontFamily: "var(--font-display)", fontSize: "24px", fontWeight: 800, letterSpacing: "-0.5px" }}>
           Screening Results
         </h2>
-        <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "4px" }}>
-          2 passed · 1 failed · 3 total
-        </p>
+        {timeLog && (
+          <p style={{ color: "var(--text-secondary)", fontSize: "14px", marginTop: "4px", fontFamily: "var(--font-mono)" }}>
+            {timeLog.split("\n")[0]}
+          </p>
+        )}
       </div>
 
-      {/* Summary Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
-        {[
-          { label: "Total", value: "3", color: "var(--text-primary)" },
-          { label: "Passed", value: "2", color: "var(--pass)" },
-          { label: "Failed", value: "1", color: "var(--fail)" },
-        ].map(card => (
-          <div key={card.label} style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "10px",
-            padding: "1rem 1.25rem",
-          }}>
-            <p style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
-              {card.label.toUpperCase()}
-            </p>
-            <p style={{ fontSize: "28px", fontFamily: "var(--font-mono)", fontWeight: 500, color: card.color, marginTop: "4px" }}>
-              {card.value}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Candidate Cards */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-        {candidates.map((c, i) => (
-          <motion.div
-            key={c.name}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderLeft: `3px solid ${c.status === "pass" ? "var(--pass)" : "var(--fail)"}`,
-              borderRadius: "10px",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              onClick={() => setExpanded(expanded === i ? null : i)}
-              style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{
-                  width: "36px", height: "36px", borderRadius: "50%",
-                  background: "var(--surface-2)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: "var(--font-mono)", fontSize: "12px", color: "var(--text-secondary)",
-                }}>
-                  {c.name.split(" ").map(n => n[0]).join("")}
-                </div>
-                <div>
-                  <p style={{ fontWeight: 500, fontSize: "15px" }}>{c.name}</p>
-                  <p style={{ fontSize: "12px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{c.role}</p>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "22px", fontWeight: 500, color: c.status === "pass" ? "var(--pass)" : "var(--fail)" }}>
-                  {c.score}%
-                </span>
-                <span style={{
-                  fontSize: "11px", padding: "3px 10px", borderRadius: "20px",
-                  background: c.status === "pass" ? "rgba(0,255,148,0.1)" : "rgba(255,77,77,0.1)",
-                  color: c.status === "pass" ? "var(--pass)" : "var(--fail)",
-                  fontFamily: "var(--font-mono)",
-                }}>
-                  {c.status.toUpperCase()}
-                </span>
-                <span style={{ color: "var(--text-muted)", fontSize: "16px" }}>
-                  {expanded === i ? "▲" : "▼"}
-                </span>
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {expanded === i && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  style={{ borderTop: "1px solid var(--border)", padding: "16px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}
-                >
-                  <div>
-                    <p style={{ fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", marginBottom: "8px" }}>STRENGTHS</p>
-                    {c.strengths.map(s => (
-                      <p key={s} style={{ fontSize: "13px", color: "var(--pass)", marginBottom: "4px" }}>+ {s}</p>
-                    ))}
-                  </div>
-                  <div>
-                    <p style={{ fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)", marginBottom: "8px" }}>WEAKNESSES</p>
-                    {c.weaknesses.map(w => (
-                      <p key={w} style={{ fontSize: "13px", color: "var(--fail)", marginBottom: "4px" }}>− {w}</p>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
+      {/* Raw Report */}
+      <div style={{
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "10px",
+        padding: "1.5rem",
+        fontSize: "14px",
+        color: "var(--text-primary)",
+        lineHeight: "1.8",
+        maxHeight: "600px",
+        overflowY: "auto",
+      }}>
+        <ReactMarkdown>{report}</ReactMarkdown>
       </div>
     </div>
   );

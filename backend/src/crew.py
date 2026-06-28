@@ -8,15 +8,14 @@ import fitz  # PyMuPDF — reads PDFs before the crew starts
 import time
 import os
 
-def run_crew(company: str, roles: list, resume_paths: list, threshold: int):
+def run_crew(roles: list, resume_paths: list, threshold: int, jds: dict):
     start_time = time.time()
 
     print(f"\n🚀 Starting Sieve pipeline...")
-    print(f"Company: {company}")
     print(f"Roles: {', '.join(roles)}")
     print(f"Resumes: {len(resume_paths)}")
     print(f"Threshold: {threshold}%\n")
-
+    
     # read all PDFs upfront — plain text passed into task descriptions
     # this avoids tool calling at runtime which breaks with llama3.2 + litellm
     resume_texts = {}
@@ -34,7 +33,7 @@ def run_crew(company: str, roles: list, resume_paths: list, threshold: int):
             print(f"❌ Failed to read resume: {path} — {str(e)}")
 
     agents = get_agents()
-    tasks = get_tasks(company, roles, resume_paths, threshold, resume_texts)
+    tasks = get_tasks(roles, resume_paths, threshold, resume_texts, jds)
 
     # assemble the crew and run sequentially
     crew = Crew(
