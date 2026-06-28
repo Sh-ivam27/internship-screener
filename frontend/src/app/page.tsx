@@ -489,6 +489,15 @@ function CalibrateTab() {
     setError("");
 
     try {
+      // Step 1 — upload the calibration resumes to backend
+      const formData = new FormData();
+      Array.from(files!).forEach(file => formData.append("files", file));
+      await fetch("http://localhost:8000/upload-calibration-resumes", {
+        method: "POST",
+        body: formData,
+      });
+
+      // Step 2 — send manual scores to calibrate endpoint
       const response = await fetch("http://localhost:8000/calibrate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

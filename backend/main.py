@@ -46,6 +46,22 @@ async def upload_resumes(files: list[UploadFile] = File(...)):
         saved.append(path)
     return {"uploaded": saved}
 
+CALIBRATION_DIR = "calibration_inputs"
+os.makedirs(CALIBRATION_DIR, exist_ok=True)
+
+@app.post("/upload-calibration-resumes") # receives calibration resumes separately from screening resumes
+async def upload_calibration_resumes(files: list[UploadFile] = File(...)):
+    saved = []
+    # clear old calibration resumes first
+    for f in os.listdir(CALIBRATION_DIR):
+        os.remove(os.path.join(CALIBRATION_DIR, f))
+    for file in files:
+        path = os.path.join(CALIBRATION_DIR, file.filename)
+        with open(path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+        saved.append(path)
+    return {"uploaded": saved}
+
 @app.post("/run-screener") # frontend knocks on this door and hands over roles and threshold (server triggers the crewAI pipeline)
 async def run_screener(
     roles: str = Form(...),
@@ -98,54 +114,83 @@ def get_results():
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
-@app.post("/calibrate") # frontend sends recruiter's manual scores, backend generates personalised scoring prompt
+@app.post("/calibrate") # receives manual scores, reads resume PDFs, generates personalised prompt
 async def calibrate(request: dict):
+    import fitz
     scores = request.get("scores", {})
-    
+
     if not scores:
         return JSONResponse(status_code=400, content={"error": "No scores provided"})
 
+    # read each calibration resume PDF and pair with manual scores
+    resume_examples = {}
+    for filename, resume_scores in scores.items():
+        pdf_path = os.path.join(CALIBRATION_DIR, filename)
+        if os.path.exists(pdf_path):
+            doc = fitz.open(pdf_path)
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            doc.close()
+            resume_examples[filename] = {
+                "resume_text": text.strip()[:2000],  # first 2000 chars to keep prompt concise
+                "manual_scores": resume_scores,
+                "total": sum(resume_scores.values())
+            }
+
     # analyse scoring pattern — find average score per field across all resumes
-    field_averages = {}
-    for field in [
+    fields = [
         "Relevant Skills Match", "Experience Level", "Project Relevance",
         "Educational Background", "Tools & Technologies", "Achievement Quality",
         "Communication Clarity", "Role-Specific Keywords",
         "Extracurriculars / Leadership", "Overall Fit Impression"
-    ]:
-        field_scores = [resume_scores[field] for resume_scores in scores.values() if field in resume_scores]
+    ]
+
+    field_averages = {}
+    for field in fields:
+        field_scores = [s["manual_scores"][field] for s in resume_examples.values() if field in s["manual_scores"]]
         field_averages[field] = round(sum(field_scores) / len(field_scores), 1) if field_scores else 5.0
 
-    # find which fields the recruiter weights heavily (score > 7) and lightly (score < 4)
+    # find heavily and lightly weighted fields
     high_weight = [f for f, avg in field_averages.items() if avg >= 7]
     low_weight = [f for f, avg in field_averages.items() if avg <= 4]
 
-    # generate personalised scoring prompt based on recruiter's pattern
+    # build example strings from real resumes + scores
+    examples_text = ""
+    for filename, data in resume_examples.items():
+        examples_text += f"\n--- Example Resume: {filename} ---\n"
+        examples_text += f"Resume snippet: {data['resume_text'][:500]}\n"
+        examples_text += f"Recruiter scores: {data['manual_scores']}\n"
+        examples_text += f"Total: {data['total']}/100\n"
+
+    # generate personalised prompt with real resume examples
     personalised_prompt = f"""
 You are scoring resumes for a recruiter with a specific evaluation style learned from their manual scores.
 
 RECRUITER SCORING STYLE:
-- Average scores per field from manual evaluation: {field_averages}
-- Fields this recruiter weights HEAVILY (score generously): {high_weight if high_weight else 'None identified yet'}
-- Fields this recruiter weights LIGHTLY (score strictly): {low_weight if low_weight else 'None identified yet'}
+- Average scores per field: {field_averages}
+- Fields weighted HEAVILY (be generous, reward partial matches): {high_weight if high_weight else 'None'}
+- Fields weighted LIGHTLY (be strict, only reward strong matches): {low_weight if low_weight else 'None'}
+
+REAL EXAMPLES FROM THIS RECRUITER:
+{examples_text}
 
 INSTRUCTIONS:
-- Mirror this recruiter's scoring style when evaluating candidates
-- For heavily weighted fields: be generous, reward partial matches
-- For lightly weighted fields: be strict, only reward strong matches
+- Study the examples above to understand exactly how this recruiter scores
+- Mirror their scoring style precisely when evaluating new candidates
 - Score each field 0-10, total out of 100
-- Maintain consistency with the recruiter's demonstrated preferences
+- Be consistent with the recruiter's demonstrated preferences shown in the examples above
 """
 
-    # save personalised prompt to file
+    # save personalised prompt
     os.makedirs("outputs", exist_ok=True)
     with open("outputs/personalised_prompt.txt", "w") as f:
         f.write(personalised_prompt)
 
-    # save calibration data for validation later
+    # save calibration data
     with open("outputs/calibration_data.json", "w") as f:
         json.dump({
-            "manual_scores": scores,
+            "resume_examples": {k: {**v, "resume_text": v["resume_text"][:200]} for k, v in resume_examples.items()},
             "field_averages": field_averages,
             "high_weight_fields": high_weight,
             "low_weight_fields": low_weight,
@@ -154,6 +199,7 @@ INSTRUCTIONS:
 
     return {
         "status": "calibrated",
+        "resumes_used": len(resume_examples),
         "field_averages": field_averages,
         "high_weight_fields": high_weight,
         "low_weight_fields": low_weight,
